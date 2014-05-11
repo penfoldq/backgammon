@@ -32,13 +32,13 @@ part_space = 10;
 < a  >   < c >   < e >   < g  >
      < b >   < d >   < f >
 
-<          "len"              >
+<        "length"             >
 
 a == g == "part_finger()"
 b == c == d == e == f == "tab_sz"
 
 for the above example:
-    len = 31
+    length = 31
     num_fingers = 7
     part_finger = 1.5
     tab_sz = 4
@@ -89,33 +89,33 @@ function is_odd(val) = !is_even(val);
 //               false = outside is shoulder (0)
 function finger_type(type) = (type == true) ? 1 : 0;
 
-// num_fingers : how many times does "tab_sz" fit into "len"?
-function num_fingers(len,tab_sz) = floor(len/tab_sz);
+// num_fingers : how many times does "tab_sz" fit into "length"?
+function num_fingers(length,tab_sz) = floor(length/tab_sz);
 
-// finger_remainder : what's left of "len" after we have discounted
+// finger_remainder : what's left of "length" after we have discounted
 //                    "num_fingers()" of "tab_sz"?
-function finger_remainder(len,tab_sz)
-         = (len - ( tab_sz * ( num_fingers(len,tab_sz) ) ) );
+function finger_remainder(length,tab_sz)
+         = (length - ( tab_sz * ( num_fingers(length,tab_sz) ) ) );
 
 // part_finger : what's the remainder on each side?
-function part_finger(len,tab_sz) 
-         = finger_remainder(len,tab_sz)/2;
+function part_finger(length,tab_sz) 
+         = finger_remainder(length,tab_sz)/2;
 
-module fingers_x(len, tab_sz, thick, type)
+module fingers_x(length, tab_sz, thick, type)
 {
 
-echo(str("len"),len);
+echo(str("length"),length);
 echo(str("tab_sz"),tab_sz);
 echo(str("thick"),thick);
-echo(str("num_fingers"),num_fingers(len,tab_sz));
+echo(str("num_fingers"),num_fingers(length,tab_sz));
 echo(str("type"),type);
 echo(str("finger_type"),finger_type(type),
         finger_type(type) ? str("pin") : str("shoulder"));
-echo(str("part_finger"),part_finger(len,tab_sz,type));
+echo(str("part_finger"),part_finger(length,tab_sz,type));
 
-        translate([part_finger(len,tab_sz),0,0])
+        translate([part_finger(length,tab_sz),0,0])
         {
-                for (finger_lp = [0 : num_fingers(len,tab_sz)-1 ])
+                for (finger_lp = [0 : num_fingers(length,tab_sz)-1 ])
                 {
                         if ( finger_type(type) 
                              ? !is_even(finger_lp) 
@@ -135,13 +135,13 @@ echo(str("part_finger"),part_finger(len,tab_sz,type));
         if (!finger_type(type))
         {
                 color("blue")
-                square([part_finger(len,tab_sz),thick]);
+                square([part_finger(length,tab_sz),thick]);
         
-                translate([(tab_sz*(num_fingers(len,tab_sz))
-                            +part_finger(len,tab_sz)),0,0])
+                translate([(tab_sz*(num_fingers(length,tab_sz))
+                            +part_finger(length,tab_sz)),0,0])
                 {
                         color("yellow")
-                        square([part_finger(len,tab_sz),thick]);        
+                        square([part_finger(length,tab_sz),thick]);        
                 }
         }
 
