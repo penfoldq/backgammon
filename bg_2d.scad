@@ -92,10 +92,17 @@ function finger_type(type) = (type == true) ? 1 : 0;
 // num_fingers : how many times does "tab_sz" fit into "length"?
 function num_fingers(length,tab_sz) = floor(length/tab_sz);
 
+// num_odd_fingers : force num_fingers() to be odd to distribute
+//                   the tabs uniformly
+function num_odd_fingers(length,tab_sz)
+         = is_even(num_fingers(length,tab_sz))
+           ? num_fingers(length,tab_sz) - 1
+           : num_fingers(length,tab_sz) ;
+
 // finger_remainder : what's left of "length" after we have discounted
 //                    "num_fingers()" of "tab_sz"?
 function finger_remainder(length,tab_sz)
-         = (length - ( tab_sz * ( num_fingers(length,tab_sz) ) ) );
+         = (length - ( tab_sz * ( num_odd_fingers(length,tab_sz) ) ) );
 
 // part_finger : what's the remainder on each side?
 function part_finger(length,tab_sz) 
@@ -108,36 +115,38 @@ echo(str("length"),length);
 echo(str("tab_sz"),tab_sz);
 echo(str("thick"),thick);
 echo(str("num_fingers"),num_fingers(length,tab_sz));
+echo(str("num_odd_fingers"),num_odd_fingers(length,tab_sz));
 echo(str("type"),type);
 echo(str("finger_type"),finger_type(type),
         finger_type(type) ? str("pin") : str("shoulder"));
 echo(str("part_finger"),part_finger(length,tab_sz,type));
 
+
         translate([part_finger(length,tab_sz),0,0])
         {
-                for (finger_lp = [0 : num_fingers(length,tab_sz)-1 ])
+                for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
+                                  : num_odd_fingers(length,tab_sz) ])
                 {
                         if ( finger_type(type) 
                              ? !is_even(finger_lp) 
                              : is_even(finger_lp) )
                         {
-                                translate([(finger_lp * tab_sz),0,0])
+                                translate([((finger_lp-1) * tab_sz),0,0])
                                 {
                                         color("red")
-
                                         square([tab_sz,thick]);
                                 }
                         }
                 }
         }
-
+        
         // extra cutouts for type 0
         if (!finger_type(type))
         {
                 color("blue")
                 square([part_finger(length,tab_sz),thick]);
         
-                translate([(tab_sz*(num_fingers(length,tab_sz))
+                translate([(tab_sz*(num_odd_fingers(length,tab_sz))
                             +part_finger(length,tab_sz)),0,0])
                 {
                         color("yellow")
@@ -145,7 +154,61 @@ echo(str("part_finger"),part_finger(length,tab_sz,type));
                 }
         }
 
-} // end module fingers_x()
+}; // end module fingers_x()
+
+function marker_color_tab(type) = (type) ? "white"     : "red";
+function marker_color_pin(type) = (type) ? "lightgray" : "red";
+
+module finger_markers_x(length, tab_sz, thick, type)
+{
+
+        /* small markers to see the calculated positions */
+
+        translate([0,-thick*2,0])
+        {
+
+        
+        /* first the pin at the start */
+        translate([0,0,0])
+        color(marker_color_pin(type))
+        square([part_finger(length,tab_sz),thick]);
+
+        /* now the tabs */
+        translate([part_finger(length,tab_sz),0,0])
+        for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
+                          : num_odd_fingers(length,tab_sz) ])
+        {
+                translate([((finger_lp-1) * tab_sz),0,0])
+                color(marker_color_tab(is_even(finger_lp) ? type : !type))
+                square([tab_sz,thick]);
+        }
+
+        /* and finally the pin at the end */
+        translate([(tab_sz*(num_odd_fingers(length,tab_sz))
+                   +part_finger(length,tab_sz)),
+                   0,0])
+        {
+                color(marker_color_pin(type))
+                square([part_finger(length,tab_sz),thick]);
+        }
+
+        } // end translate to move markers away from object
+}; // end module finger_markers_x()
+
+module fingers_y(length, tab_sz, thick, type)
+{
+        translate([thick,0,0])
+        rotate([0,0,90])
+        fingers_x(length, tab_sz, thick, type);
+};
+
+module finger_markers_y(length, tab_sz, thick, type)
+{
+        translate([-thick*3,0,0])
+        rotate([0,0,90])
+        finger_markers_x(length, tab_sz, thick, type);
+};
+
 
 module hinge_side()
 {
@@ -158,101 +221,27 @@ module hinge_side()
                           (frame_thick*2),
                           frame_thick,
                           true);
-        }
-};
 
-module handle_side()
-{
-        difference()
-        {
-                square([side_height,
-                        hinge_side_length]);
-
-                fingers_x(side_height,
-                          (frame_thick*3),
+                fingers_y(hinge_side_length,
+                          (frame_thick*2),
                           frame_thick,
-                          true); // the opposite of hinge_side()
+                          true);
+
+
+                finger_markers_x(side_height,
+                                 (frame_thick*2),
+                                 1,
+                                 true);
+
+                finger_markers_y(hinge_side_length,
+                                 (frame_thick*2),
+                                 1,
+                                 true);
         }
-};
-
-module point_side()
-{
-        square([point_side_length,
-                side_height]);
-};
-
-module base()
-{
-        square([point_side_length,
-                hinge_side_length]);
-}
-
-module half_box()
-{
-        translate([0,
-                   side_height + part_space,
-                   0])
-        {
-                hinge_side();
-        };
-
-        translate([side_height + part_space, 
-                   side_height + part_space,
-                   0]) 
-        {
-                base(); 
-        };
-
-        translate([side_height         + part_space 
-                   + point_side_length + part_space, 
-                   side_height + part_space,
-                   0])
-        {
-                hinge_side();
-        };
-
-        translate([side_height + part_space, 
-                   side_height         + part_space
-                   + hinge_side_length + part_space, 
-                   0])
-        {
-                point_side();
-        };
-
-        translate([side_height + part_space, 
-                   0, 
-                   0])
-        {
-                point_side();
-        };
-}; // end module half_box()
-
-module layout()
-{
-        translate([0,
-                   0,
-                   0])
-        {
-                half_box();
-        };
-
-        translate([side_height         + part_space
-                   + point_side_length + part_space
-                   + side_height       + part_space,
-                   0,
-                   0])
-        {
-                half_box();
-        };
 };
 
 module bg_2d()
 {
-        // layout is the entire cutlist, laid out in a
-        // somewhat reasonably obvious assembly pattern,
-        // not necessarily the optimal to reduce waste.
-//        layout();
-
         // just do a single hinge_side while I get it right.
         hinge_side();
 };
