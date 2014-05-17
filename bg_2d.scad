@@ -31,6 +31,15 @@ function finger_type(type) = (type == true) ? 1 : 0;
 // num_fingers : how many times does "tab_sz" fit into "length"?
 function num_fingers(length,tab_sz) = floor(length/tab_sz);
 
+// num_ms_fingers : how many fingers can we fit if we specify the tab_sz and
+//                  the spacing between the tabs (interior) and the offset
+//                  (minimum exterior gap for not running into holes on an
+//                  adjacent side that has tabs)
+//                  NOTE : ODD NOT NECESSARY here because we force the extra
+//                  tab_sz into the offset calculation
+function num_ms_fingers(length,tab_sz,space,offset)
+         = floor((length - (2*offset) - tab_sz)/(tab_sz+space));
+
 // num_odd_fingers : force num_fingers() to be odd to distribute
 //                   the tabs uniformly
 function num_odd_fingers(length,tab_sz)
@@ -47,6 +56,13 @@ function finger_remainder(length,tab_sz)
 function part_finger(length,tab_sz) 
          = finger_remainder(length,tab_sz)/2;
 
+// part_ms_finger : what's the actual offset on each side?
+function part_ms_finger(length,tab_sz,space,offset)
+         = ( length -
+             ( ( num_ms_fingers(length,tab_sz,space,offset)
+                 * (tab_sz + space) )
+               + tab_sz ) ) / 2; 
+
 // marker_color_tab : what color to use for tabs based on the finger_type?
 //                    true  = color for remaining material
 //                    false = color for material to remove
@@ -57,6 +73,70 @@ function marker_color_tab(type) = (finger_type(type)) ? "white"     : "red";
 //                    false = color for material to remove
 function marker_color_pin(type) = (finger_type(type)) ? "lightgray" : "red";
 
+
+module ms_fingers_x(length, tab_sz, space, offset, thick, type)
+{
+        if (!finger_type(type))
+        {
+                /* first the pin at the start */
+                translate([0,0,0])
+                color(marker_color_pin(type))
+                square([part_ms_finger(length,tab_sz,space,offset),
+                        thick]);
+        }
+        
+        /* now the tabs */
+        translate([part_ms_finger(length,tab_sz,space,offset),
+                   0,0])
+        for (finger_lp
+             = [1 : num_ms_fingers(length,tab_sz,space,offset)])
+        {
+                translate([((finger_lp-1) * (tab_sz + space)),
+                           0,0])
+                {
+                        if (finger_type(type))
+                        {
+                                color(marker_color_tab(!type))
+                                square([tab_sz,thick]);
+                        }
+                        else
+                        {
+                                translate([tab_sz,0,0])
+                                color(marker_color_tab(type))
+                                square([space,thick]);
+                        }
+                }
+        }
+
+        if (finger_type(type))
+        {
+                /* now the odd tab */
+                translate([( (num_ms_fingers(length,tab_sz,space,offset))
+                             * (tab_sz+space) )
+                           + (part_ms_finger(length,tab_sz,space,offset)),
+                           0,0])
+                {
+                                color(marker_color_tab(!type))
+                                square([tab_sz,thick]);
+                }
+        }
+        else
+        {
+                
+                /* and finally the pin at the end */
+                translate([( ( (num_ms_fingers(length,tab_sz,space,offset))
+                               * (tab_sz+space) )
+                             + (part_ms_finger(length,tab_sz,space,offset))
+                             + (tab_sz) ),
+                           0,0])
+                {
+                        color(marker_color_pin(type))
+                        square([part_ms_finger(length,tab_sz,space,offset),
+                                thick]);
+                }
+
+        }
+}
 
 
 /*
@@ -118,6 +198,70 @@ module fingers_x(length, tab_sz, thick, type)
 }; // end module fingers_x()
 
 
+module ms_finger_markers_x(length, tab_sz, space, offset, thick, type)
+{
+
+echo(str("length"), length);
+echo(str("tab_sz"), tab_sz);
+echo(str("space"),  space);
+echo(str("offset"), offset);
+echo(str("thick"),  thick);
+echo(str("type"),   type);
+
+        /* move everything off from the part to make it easier to see */
+        translate([0,-thick*2,0])
+        {
+                /* first the pin at the start */
+                translate([0,0,0])
+                color(marker_color_pin(type))
+                square([part_ms_finger(length,tab_sz,space,offset),
+                        thick]);
+
+                /* now the tabs */
+                translate([part_ms_finger(length,tab_sz,space,offset),
+                           0,0])
+                for (finger_lp
+                     = [1 : num_ms_fingers(length,tab_sz,space,offset)])
+                {
+                        translate([((finger_lp-1) * (tab_sz + space)),
+                                   0,0])
+                        {
+                                color(marker_color_tab(!type))
+                                square([tab_sz,thick]);
+
+                                translate([tab_sz,0,0])
+                                color(marker_color_tab(type))
+                                square([space,thick]);
+                        }
+                }
+
+                /* now the odd tab */
+                translate([( (num_ms_fingers(length,tab_sz,space,offset))
+                             * (tab_sz+space) )
+                           + (part_ms_finger(length,tab_sz,space,offset)),
+                           0,0])
+                {
+                                color(marker_color_tab(!type))
+                                square([tab_sz,thick]);
+                }
+                
+                
+                /* and finally the pin at the end */
+                translate([( ( (num_ms_fingers(length,tab_sz,space,offset))
+                               * (tab_sz+space) )
+                             + (part_ms_finger(length,tab_sz,space,offset))
+                             + (tab_sz) ),
+                           0,0])
+                {
+                        color(marker_color_pin(type))
+                        square([part_ms_finger(length,tab_sz,space,offset),
+                                thick]);
+                }
+
+        } // end translate to move markers away from object
+
+}; // end module finger_markers_x()
+
 /*
   finger_markers_x()
 
@@ -142,9 +286,6 @@ module fingers_x(length, tab_sz, thick, type)
 */
 module finger_markers_x(length, tab_sz, thick, type)
 {
-
-        /* small markers to see the calculated positions */
-
         /* move everything off from the part to make it easier to see */
         translate([0,-thick*2,0])
         {
@@ -247,32 +388,37 @@ module finger_markers_y(length, tab_sz, thick, type)
 */
 module hinge_side()
 {
-        difference()
+//        difference()
         {
                 square([side_height,
                         hinge_side_length]);
 
-                fingers_x(side_height,
-                          (frame_thick*0.5),
-                          frame_thick,
-                          true);
+                ms_fingers_x(side_height,
+                             (frame_thick*0.5),
+                             (frame_thick*2),
+                             (frame_thick),
+                             frame_thick,
+                             true);
 
-                fingers_y(hinge_side_length,
+/*                fingers_y(hinge_side_length,
                           (frame_thick*2),
                           frame_thick,
                           true);
-
+*/
         }
         
-                finger_markers_x(side_height,
-                                 (frame_thick*2),
-                                 1,
-                                 true);
+                ms_finger_markers_x(side_height,     // length
+                                    (frame_thick),   // tab_sz
+                                    (frame_thick*0.5), // space
+                                    0,     // offset
+                                    1,               // thick
+                                    true);           // type
 
-                finger_markers_y(hinge_side_length,
+/*                finger_markers_y(hinge_side_length,
                                  (frame_thick*2),
                                  1,
                                  true);
+*/
 
 };
 
