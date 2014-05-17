@@ -15,68 +15,6 @@ part_space = 10;
 
 
 
-/*
-
-|                             | <- type = 0 (false)
-+----+   +---+   +---+   +----+ /\
-|    |   |   |   |   |   |    |  "thick"
-|    +---+   +---+   +---+    | \/
-|                             | <- type = 1 (true)
-
-|                        | <- type = 0 (false)
-+----+   +---+   +---+   + /\
-|    |   |   |   |   |   |  "thick"
-|    +---+   +---+   +---+ \/
-|                        | <- type = 1 (true)
-
-< a  >   < c >   < e >   < g  >
-     < b >   < d >   < f >
-
-<        "length"             >
-
-a == g == "part_finger()"
-b == c == d == e == f == "tab_sz"
-
-for the above example:
-    length = 31
-    num_fingers = 7
-    part_finger = 1.5
-    tab_sz = 4
-
-
-// how many times does "tab_sz" fit into "len"
-function num_fingers(len,tab_sz) = floor(len/tab_sz);
-
-// what's the remainder on each side?
-function part_finger(len,tab_sz) = (len-(tab_sz*num_fingers))/2;
-
-// start with type 1
-translate([part_finger(len,tab_sz),0,0])
-for i = 1 to num_fingers(len,tab_sz)
-    if is_even(i)
-       translate([i*tab_sz,0,0])
-       square([tab_sz,thick]);
-
-// now type 0
-translate([part_finger(len,tab_sz),0,0])
-for i = 1 to num_fingers(len,tab_sz)
-    if !is_even(i)
-       translate([i*tab_sz,0,0])
-       square([tab_sz,thick]);
-
-
-// extras for type 0
-square([tab_sz+part_finger(len,tab_sz),thick]);
-translate([tab_sz*(num_fingers(len,tab_sz)-1)
-           +part_finger(len,tab_sz),0,0])
-square([tab_sz+part_finger(len,tab_sz),thick]);
-
-
-*/
-
-
-
-
 // is_even : true if val is even
 //           false if val is odd
 function is_even(val) = ((val % 2) == 0);
@@ -85,7 +23,8 @@ function is_even(val) = ((val % 2) == 0);
 //          false if val is even
 function is_odd(val) = !is_even(val);
 
-// finger_type : true  = outside remains     (1)
+// finger_type : for boards to mesh, need to be one of each type
+//               true  = outside remains     (1)
 //               false = outside is shoulder (0)
 function finger_type(type) = (type == true) ? 1 : 0;
 
@@ -100,7 +39,7 @@ function num_odd_fingers(length,tab_sz)
            : num_fingers(length,tab_sz) ;
 
 // finger_remainder : what's left of "length" after we have discounted
-//                    "num_fingers()" of "tab_sz"?
+//                    "num_odd_fingers()" of "tab_sz"?
 function finger_remainder(length,tab_sz)
          = (length - ( tab_sz * ( num_odd_fingers(length,tab_sz) ) ) );
 
@@ -108,20 +47,42 @@ function finger_remainder(length,tab_sz)
 function part_finger(length,tab_sz) 
          = finger_remainder(length,tab_sz)/2;
 
+// marker_color_tab : what color to use for tabs based on the finger_type?
+//                    true  = color for remaining material
+//                    false = color for material to remove
+function marker_color_tab(type) = (finger_type(type)) ? "white"     : "red";
+
+// marker_color_pin : what color to use for pins based on the finger_type?
+//                    true  = color for remaining material
+//                    false = color for material to remove
+function marker_color_pin(type) = (finger_type(type)) ? "lightgray" : "red";
+
+
+
+/*
+  fingers_x()
+
+  length - the length of the entire joint
+  tab_sz - how big is each tab
+  thick  - how deep to cut each tab
+           (the thickness of the other piece in the joint)
+  type   - 'true'  the outside is a shoulder
+           'false' the outside is a pin
+
+  Generates objects in the positions of the material to be removed from an
+  object to create finger joints. This should then be differenced away from
+  the original object to create the correct outline.
+
+  Different thicknesses of materials can be jointed with this module. The
+  "thick" parameter is the thickness of the other material in the joint, not
+  necessarily this piece. This module does not need to be placed at an edge
+  of the piece, interior dividers will work just as well. 
+
+  This is the x-axis version, all the logic for the creation of the markers is
+  here. This is then rotated and moved for the other axis versions. 
+*/
 module fingers_x(length, tab_sz, thick, type)
 {
-
-echo(str("length"),length);
-echo(str("tab_sz"),tab_sz);
-echo(str("thick"),thick);
-echo(str("num_fingers"),num_fingers(length,tab_sz));
-echo(str("num_odd_fingers"),num_odd_fingers(length,tab_sz));
-echo(str("type"),type);
-echo(str("finger_type"),finger_type(type),
-        finger_type(type) ? str("pin") : str("shoulder"));
-echo(str("part_finger"),part_finger(length,tab_sz,type));
-
-
         translate([part_finger(length,tab_sz),0,0])
         {
                 for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
@@ -140,7 +101,7 @@ echo(str("part_finger"),part_finger(length,tab_sz,type));
                 }
         }
         
-        // extra cutouts for type 0
+        // extra cutouts for type 0 - shoulders on outside
         if (!finger_type(type))
         {
                 color("blue")
@@ -149,52 +110,96 @@ echo(str("part_finger"),part_finger(length,tab_sz,type));
                 translate([(tab_sz*(num_odd_fingers(length,tab_sz))
                             +part_finger(length,tab_sz)),0,0])
                 {
-                        color("yellow")
+                        color("blue")
                         square([part_finger(length,tab_sz),thick]);        
                 }
         }
 
 }; // end module fingers_x()
 
-function marker_color_tab(type) = (type) ? "white"     : "red";
-function marker_color_pin(type) = (type) ? "lightgray" : "red";
 
+/*
+  finger_markers_x()
+
+  length - the length of the entire joint
+  tab_sz - how big is each tab
+  thick  - how deep to cut each tab
+           (the thickness of the other piece in the joint)
+  type   - 'true'  the outside is a shoulder
+           'false' the outside is a pin
+
+  Generates informational markers to show the calculations of the placement
+  of the cutouts to make the pins and holes for finger joints. These are
+  shifted a small distance from the piece for enhanced clarity.
+
+  This is the x-axis version, all the logic for the creation of the markers is
+  here. This is then rotated and moved for the other axis versions. The logic
+  here is mostly a duplication of the fingers_x() logic but it is deliberately
+  repeated because the differences make it easier to show the intention. 
+
+  NOTE: This is NOT intended to form part of the final design, this is for
+  informational/debug purposes only.
+*/
 module finger_markers_x(length, tab_sz, thick, type)
 {
 
         /* small markers to see the calculated positions */
 
+        /* move everything off from the part to make it easier to see */
         translate([0,-thick*2,0])
         {
-
-        
-        /* first the pin at the start */
-        translate([0,0,0])
-        color(marker_color_pin(type))
-        square([part_finger(length,tab_sz),thick]);
-
-        /* now the tabs */
-        translate([part_finger(length,tab_sz),0,0])
-        for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
-                          : num_odd_fingers(length,tab_sz) ])
-        {
-                translate([((finger_lp-1) * tab_sz),0,0])
-                color(marker_color_tab(is_even(finger_lp) ? type : !type))
-                square([tab_sz,thick]);
-        }
-
-        /* and finally the pin at the end */
-        translate([(tab_sz*(num_odd_fingers(length,tab_sz))
-                   +part_finger(length,tab_sz)),
-                   0,0])
-        {
+       
+                /* first the pin at the start */
+                translate([0,0,0])
                 color(marker_color_pin(type))
                 square([part_finger(length,tab_sz),thick]);
-        }
+
+                /* now the tabs */
+                translate([part_finger(length,tab_sz),0,0])
+                for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
+                                  : num_odd_fingers(length,tab_sz) ])
+                {
+                        translate([((finger_lp-1) * tab_sz),0,0])
+                        color(marker_color_tab(is_even(finger_lp)
+                              ? type : !type))
+                        square([tab_sz,thick]);
+                }
+
+                /* and finally the pin at the end */
+                translate([(tab_sz*(num_odd_fingers(length,tab_sz))
+                           +part_finger(length,tab_sz)),
+                           0,0])
+                {
+                        color(marker_color_pin(type))
+                        square([part_finger(length,tab_sz),thick]);
+                }
 
         } // end translate to move markers away from object
+
 }; // end module finger_markers_x()
 
+/*
+  fingers_y()
+
+  length - the length of the entire joint
+  tab_sz - how big is each tab
+  thick  - how deep to cut each tab
+           (the thickness of the other piece in the joint)
+  type   - 'true'  the outside is a shoulder
+           'false' the outside is a pin
+
+  Generates objects in the positions of the material to be removed from an
+  object to create finger joints. This should then be differenced away from
+  the original object to create the correct outline.
+
+  Different thicknesses of materials can be jointed with this module. The
+  "thick" parameter is the thickness of the other material in the joint, not
+  necessarily this piece. This module does not need to be placed at an edge
+  of the piece, interior dividers will work just as well. 
+
+  This is the y-axis version, produced by rotating and moving the x-axis
+  version.
+*/
 module fingers_y(length, tab_sz, thick, type)
 {
         translate([thick,0,0])
@@ -202,6 +207,26 @@ module fingers_y(length, tab_sz, thick, type)
         fingers_x(length, tab_sz, thick, type);
 };
 
+/*
+  finger_markers_y()
+
+  length - the length of the entire joint
+  tab_sz - how big is each tab
+  thick  - how deep to cut each tab
+           (the thickness of the other piece in the joint)
+  type   - 'true'  the outside is a shoulder
+           'false' the outside is a pin
+
+  Generates informational markers to show the calculations of the placement
+  of the cutouts to make the pins and holes for finger joints. These are
+  shifted a small distance from the piece for enhanced clarity.
+
+  This is the y-axis version, produced by rotating and moving the x-axis
+  version.
+
+  NOTE: This is NOT intended to form part of the final design, this is for
+  informational/debug purposes only.
+*/
 module finger_markers_y(length, tab_sz, thick, type)
 {
         translate([-thick*3,0,0])
@@ -210,15 +235,25 @@ module finger_markers_y(length, tab_sz, thick, type)
 };
 
 
+/*
+  hinge_side()
+
+  no parameters
+
+  Creates a single side for the box along the "hinge side".
+  Interfaces to the hinge along one long edge (no plans to use a living hinge
+  for this), to the base along the other long edge and to the "points sides"
+  on the remaining two (short) sides.
+*/
 module hinge_side()
 {
-//        difference()
+        difference()
         {
                 square([side_height,
                         hinge_side_length]);
 
                 fingers_x(side_height,
-                          (frame_thick*2),
+                          (frame_thick*0.5),
                           frame_thick,
                           true);
 
@@ -227,7 +262,8 @@ module hinge_side()
                           frame_thick,
                           true);
 
-
+        }
+        
                 finger_markers_x(side_height,
                                  (frame_thick*2),
                                  1,
@@ -237,9 +273,16 @@ module hinge_side()
                                  (frame_thick*2),
                                  1,
                                  true);
-        }
+
 };
 
+/*
+  bg_2d()
+
+  no parameters
+
+  Entry point for the 2D file.
+*/
 module bg_2d()
 {
         // just do a single hinge_side while I get it right.
