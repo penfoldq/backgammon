@@ -7,377 +7,15 @@
 
 include <bg_config.scad>
 include <bg_debug.scad>
+include <bg_fingers.scad>
 
 //dump_config();
 
 // part_space : the space between parts on the 2D layout.
-part_space = 10;
-
-
-
-// is_even : true if val is even
-//           false if val is odd
-function is_even(val) = ((val % 2) == 0);
-
-// is_odd : true if val is odd
-//          false if val is even
-function is_odd(val) = !is_even(val);
-
-// finger_type : for boards to mesh, need to be one of each type
-//               true  = outside remains     (1)
-//               false = outside is shoulder (0)
-function finger_type(type) = (type == true) ? 1 : 0;
-
-// num_fingers : how many times does "tab_sz" fit into "length"?
-function num_fingers(length,tab_sz) = floor(length/tab_sz);
-
-// num_ms_fingers : how many fingers can we fit if we specify the tab_sz and
-//                  the spacing between the tabs (interior) and the offset
-//                  (minimum exterior gap for not running into holes on an
-//                  adjacent side that has tabs)
-//                  NOTE : ODD NOT NECESSARY here because we force the extra
-//                  tab_sz into the offset calculation
-function num_ms_fingers(length,tab_sz,space,offset)
-         = floor((length - (2*offset) - tab_sz)/(tab_sz+space));
-
-// num_odd_fingers : force num_fingers() to be odd to distribute
-//                   the tabs uniformly
-function num_odd_fingers(length,tab_sz)
-         = is_even(num_fingers(length,tab_sz))
-           ? num_fingers(length,tab_sz) - 1
-           : num_fingers(length,tab_sz) ;
-
-// finger_remainder : what's left of "length" after we have discounted
-//                    "num_odd_fingers()" of "tab_sz"?
-function finger_remainder(length,tab_sz)
-         = (length - ( tab_sz * ( num_odd_fingers(length,tab_sz) ) ) );
-
-// part_finger : what's the remainder on each side?
-function part_finger(length,tab_sz) 
-         = finger_remainder(length,tab_sz)/2;
-
-// part_ms_finger : what's the actual offset on each side?
-function part_ms_finger(length,tab_sz,space,offset)
-         = ( length -
-             ( ( num_ms_fingers(length,tab_sz,space,offset)
-                 * (tab_sz + space) )
-               + tab_sz ) ) / 2; 
-
-// marker_color_tab : what color to use for tabs based on the finger_type?
-//                    true  = color for remaining material
-//                    false = color for material to remove
-function marker_color_tab(type) = (finger_type(type)) ? "white"     : "red";
-
-// marker_color_pin : what color to use for pins based on the finger_type?
-//                    true  = color for remaining material
-//                    false = color for material to remove
-function marker_color_pin(type) = (finger_type(type)) ? "lightgray" : "red";
-
-
-module ms_fingers_x(length, tab_sz, space, offset, thick, type)
-{
-        if (!finger_type(type))
-        {
-                /* first the pin at the start */
-                translate([0,0,0])
-                color(marker_color_pin(type))
-                square([part_ms_finger(length,tab_sz,space,offset),
-                        thick]);
-        }
-        
-        /* now the tabs */
-        translate([part_ms_finger(length,tab_sz,space,offset),
-                   0,0])
-        for (finger_lp
-             = [1 : num_ms_fingers(length,tab_sz,space,offset)])
-        {
-                translate([((finger_lp-1) * (tab_sz + space)),
-                           0,0])
-                {
-                        if (finger_type(type))
-                        {
-                                color(marker_color_tab(!type))
-                                square([tab_sz,thick]);
-                        }
-                        else
-                        {
-                                translate([tab_sz,0,0])
-                                color(marker_color_tab(type))
-                                square([space,thick]);
-                        }
-                }
-        }
-
-        if (finger_type(type))
-        {
-                /* now the odd tab */
-                translate([( (num_ms_fingers(length,tab_sz,space,offset))
-                             * (tab_sz+space) )
-                           + (part_ms_finger(length,tab_sz,space,offset)),
-                           0,0])
-                {
-                                color(marker_color_tab(!type))
-                                square([tab_sz,thick]);
-                }
-        }
-        else
-        {
-                
-                /* and finally the pin at the end */
-                translate([( ( (num_ms_fingers(length,tab_sz,space,offset))
-                               * (tab_sz+space) )
-                             + (part_ms_finger(length,tab_sz,space,offset))
-                             + (tab_sz) ),
-                           0,0])
-                {
-                        color(marker_color_pin(type))
-                        square([part_ms_finger(length,tab_sz,space,offset),
-                                thick]);
-                }
-
-        }
-}
-
+part_space = 2;
 
 /*
-  fingers_x()
-
-  length - the length of the entire joint
-  tab_sz - how big is each tab
-  thick  - how deep to cut each tab
-           (the thickness of the other piece in the joint)
-  type   - 'true'  the outside is a shoulder
-           'false' the outside is a pin
-
-  Generates objects in the positions of the material to be removed from an
-  object to create finger joints. This should then be differenced away from
-  the original object to create the correct outline.
-
-  Different thicknesses of materials can be jointed with this module. The
-  "thick" parameter is the thickness of the other material in the joint, not
-  necessarily this piece. This module does not need to be placed at an edge
-  of the piece, interior dividers will work just as well. 
-
-  This is the x-axis version, all the logic for the creation of the markers is
-  here. This is then rotated and moved for the other axis versions. 
-*/
-module fingers_x(length, tab_sz, thick, type)
-{
-        translate([part_finger(length,tab_sz),0,0])
-        {
-                for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
-                                  : num_odd_fingers(length,tab_sz) ])
-                {
-                        if ( finger_type(type) 
-                             ? !is_even(finger_lp) 
-                             : is_even(finger_lp) )
-                        {
-                                translate([((finger_lp-1) * tab_sz),0,0])
-                                {
-                                        color("red")
-                                        square([tab_sz,thick]);
-                                }
-                        }
-                }
-        }
-        
-        // extra cutouts for type 0 - shoulders on outside
-        if (!finger_type(type))
-        {
-                color("blue")
-                square([part_finger(length,tab_sz),thick]);
-        
-                translate([(tab_sz*(num_odd_fingers(length,tab_sz))
-                            +part_finger(length,tab_sz)),0,0])
-                {
-                        color("blue")
-                        square([part_finger(length,tab_sz),thick]);        
-                }
-        }
-
-}; // end module fingers_x()
-
-
-module ms_finger_markers_x(length, tab_sz, space, offset, thick, type)
-{
-
-echo(str("length"), length);
-echo(str("tab_sz"), tab_sz);
-echo(str("space"),  space);
-echo(str("offset"), offset);
-echo(str("thick"),  thick);
-echo(str("type"),   type);
-
-        /* move everything off from the part to make it easier to see */
-        translate([0,-thick*2,0])
-        {
-                /* first the pin at the start */
-                translate([0,0,0])
-                color(marker_color_pin(type))
-                square([part_ms_finger(length,tab_sz,space,offset),
-                        thick]);
-
-                /* now the tabs */
-                translate([part_ms_finger(length,tab_sz,space,offset),
-                           0,0])
-                for (finger_lp
-                     = [1 : num_ms_fingers(length,tab_sz,space,offset)])
-                {
-                        translate([((finger_lp-1) * (tab_sz + space)),
-                                   0,0])
-                        {
-                                color(marker_color_tab(!type))
-                                square([tab_sz,thick]);
-
-                                translate([tab_sz,0,0])
-                                color(marker_color_tab(type))
-                                square([space,thick]);
-                        }
-                }
-
-                /* now the odd tab */
-                translate([( (num_ms_fingers(length,tab_sz,space,offset))
-                             * (tab_sz+space) )
-                           + (part_ms_finger(length,tab_sz,space,offset)),
-                           0,0])
-                {
-                                color(marker_color_tab(!type))
-                                square([tab_sz,thick]);
-                }
-                
-                
-                /* and finally the pin at the end */
-                translate([( ( (num_ms_fingers(length,tab_sz,space,offset))
-                               * (tab_sz+space) )
-                             + (part_ms_finger(length,tab_sz,space,offset))
-                             + (tab_sz) ),
-                           0,0])
-                {
-                        color(marker_color_pin(type))
-                        square([part_ms_finger(length,tab_sz,space,offset),
-                                thick]);
-                }
-
-        } // end translate to move markers away from object
-
-}; // end module finger_markers_x()
-
-/*
-  finger_markers_x()
-
-  length - the length of the entire joint
-  tab_sz - how big is each tab
-  thick  - how deep to cut each tab
-           (the thickness of the other piece in the joint)
-  type   - 'true'  the outside is a shoulder
-           'false' the outside is a pin
-
-  Generates informational markers to show the calculations of the placement
-  of the cutouts to make the pins and holes for finger joints. These are
-  shifted a small distance from the piece for enhanced clarity.
-
-  This is the x-axis version, all the logic for the creation of the markers is
-  here. This is then rotated and moved for the other axis versions. The logic
-  here is mostly a duplication of the fingers_x() logic but it is deliberately
-  repeated because the differences make it easier to show the intention. 
-
-  NOTE: This is NOT intended to form part of the final design, this is for
-  informational/debug purposes only.
-*/
-module finger_markers_x(length, tab_sz, thick, type)
-{
-        /* move everything off from the part to make it easier to see */
-        translate([0,-thick*2,0])
-        {
-       
-                /* first the pin at the start */
-                translate([0,0,0])
-                color(marker_color_pin(type))
-                square([part_finger(length,tab_sz),thick]);
-
-                /* now the tabs */
-                translate([part_finger(length,tab_sz),0,0])
-                for (finger_lp = [is_even(num_fingers(length,tab_sz)) ? 0 : 1
-                                  : num_odd_fingers(length,tab_sz) ])
-                {
-                        translate([((finger_lp-1) * tab_sz),0,0])
-                        color(marker_color_tab(is_even(finger_lp)
-                              ? type : !type))
-                        square([tab_sz,thick]);
-                }
-
-                /* and finally the pin at the end */
-                translate([(tab_sz*(num_odd_fingers(length,tab_sz))
-                           +part_finger(length,tab_sz)),
-                           0,0])
-                {
-                        color(marker_color_pin(type))
-                        square([part_finger(length,tab_sz),thick]);
-                }
-
-        } // end translate to move markers away from object
-
-}; // end module finger_markers_x()
-
-/*
-  fingers_y()
-
-  length - the length of the entire joint
-  tab_sz - how big is each tab
-  thick  - how deep to cut each tab
-           (the thickness of the other piece in the joint)
-  type   - 'true'  the outside is a shoulder
-           'false' the outside is a pin
-
-  Generates objects in the positions of the material to be removed from an
-  object to create finger joints. This should then be differenced away from
-  the original object to create the correct outline.
-
-  Different thicknesses of materials can be jointed with this module. The
-  "thick" parameter is the thickness of the other material in the joint, not
-  necessarily this piece. This module does not need to be placed at an edge
-  of the piece, interior dividers will work just as well. 
-
-  This is the y-axis version, produced by rotating and moving the x-axis
-  version.
-*/
-module fingers_y(length, tab_sz, thick, type)
-{
-        translate([thick,0,0])
-        rotate([0,0,90])
-        fingers_x(length, tab_sz, thick, type);
-};
-
-/*
-  finger_markers_y()
-
-  length - the length of the entire joint
-  tab_sz - how big is each tab
-  thick  - how deep to cut each tab
-           (the thickness of the other piece in the joint)
-  type   - 'true'  the outside is a shoulder
-           'false' the outside is a pin
-
-  Generates informational markers to show the calculations of the placement
-  of the cutouts to make the pins and holes for finger joints. These are
-  shifted a small distance from the piece for enhanced clarity.
-
-  This is the y-axis version, produced by rotating and moving the x-axis
-  version.
-
-  NOTE: This is NOT intended to form part of the final design, this is for
-  informational/debug purposes only.
-*/
-module finger_markers_y(length, tab_sz, thick, type)
-{
-        translate([-thick*3,0,0])
-        rotate([0,0,90])
-        finger_markers_x(length, tab_sz, thick, type);
-};
-
-
-/*
-  hinge_side()
+  hinge_side_a()
 
   no parameters
 
@@ -386,41 +24,595 @@ module finger_markers_y(length, tab_sz, thick, type)
   for this), to the base along the other long edge and to the "points sides"
   on the remaining two (short) sides.
 */
-module hinge_side()
+
+module hinge_side_a()
 {
-//        difference()
+        difference()
         {
+                // the side itself
                 square([side_height,
                         hinge_side_length]);
 
-                ms_fingers_x(side_height,
-                             (frame_thick*0.5),
-                             (frame_thick*2),
-                             (frame_thick),
-                             frame_thick,
-                             true);
+                // joint the sides together...
+                fingers_x(side_height,       // length
+                          hinge2point_mark,  // tab_sz
+                          hinge2point_space, // space
+                          0,                 // offset
+                          frame_thick,       // thick
+                          true);             // type
 
-/*                fingers_y(hinge_side_length,
-                          (frame_thick*2),
-                          frame_thick,
-                          true);
-*/
+                // ...on both sides
+                translate([0,
+                           hinge_side_length - frame_thick,
+                           0])
+                {
+                        fingers_x(side_height,       // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+                }
+                
+                // and the holes for the base
+                translate([side_height - base_gap - base_thick,
+                           0,
+                           0])
+                {
+                        fingers_y(hinge_side_length, // length
+                                  base2hinge_mark,   // tab_sz
+                                  base2hinge_space,  // space
+                                  frame_thick,       // offset
+                                  base_thick,        // thick
+                                  true);             // type
+                }
+
         }
-        
-                ms_finger_markers_x(side_height,     // length
-                                    (frame_thick),   // tab_sz
-                                    (frame_thick*0.5), // space
-                                    0,     // offset
-                                    1,               // thick
-                                    true);           // type
+};
 
-/*                finger_markers_y(hinge_side_length,
-                                 (frame_thick*2),
-                                 1,
-                                 true);
-*/
+module hinge_side_b()
+{
+        difference()
+        {
+                translate([side_height,
+                           0,
+                           0])
+                rotate([0,180,0])
+                {
+                        hinge_side_a();
+                }
+
+                translate([base_thick + base_gap,
+                           ((counter_thick + counter_gap)
+                            * counters_per_player
+                            + counter_gap),
+                           0])
+                {
+                        fingers_x(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+
+                translate([base_thick + base_gap,
+                           hinge_side_length
+                           - ((counter_thick + counter_gap)
+                              * counters_per_player
+                              + counter_gap),
+                           0])
+                {
+                        fingers_x(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+        }
+}
+
+module point_side_a()
+{
+        difference()
+        {
+                square([point_side_length,
+                        side_height]);
+
+                translate([0,
+                           base_gap,
+                           0])
+                {
+                        fingers_x(point_side_length, // length
+                                  base2point_mark,   // tab_sz
+                                  base2point_space,  // space
+                                  frame_thick,       // offset
+                                  base_thick,        // thick
+                                  true);             // type
+                }
+
+                translate([0,0,0])
+                {
+                        fingers_y(side_height,       // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+                }
+
+                translate([point_side_length - frame_thick,
+                           0,
+                           0])
+                {
+                        fingers_y(side_height,       // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+                }
+
+                translate([frame_thick + quadrant_width,
+                           base_gap + base_thick,
+                           0])
+                {
+                        fingers_y(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+                }
+        }
+}
+
+module point_side_b()
+{
+        translate([0,side_height,0])
+        rotate([180,0,0])
+        {
+                point_side_a();
+        }
+}
+
+module counter_divider()
+{
+        difference()
+        {
+                square([side_height - base_gap,
+                        hinge_side_length]);
+
+                translate([base_gap + base_thick,
+                           0,
+                           0])
+                {
+                        fingers_x(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                        translate([-(base_gap+base_thick),
+                                   0,
+                                   0])
+                        square([base_gap + base_thick,
+                                frame_thick]);
+
+                }
+                
+                translate([base_gap + base_thick,
+                           hinge_side_length - frame_thick,
+                           0])
+                {
+                        fingers_x(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                        translate([-(base_gap+base_thick),
+                                   0,
+                                   0])
+                        square([base_gap + base_thick,
+                                frame_thick]);
+
+                }
+                
+                translate([0,0,0])
+                {
+                        fingers_y(hinge_side_length, // length
+                                  base2hinge_mark,   // tab_sz
+                                  base2hinge_space,  // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                }
+
+                translate([base_thick,
+                           ((counter_thick + counter_gap)
+                            * counters_per_player
+                            + counter_gap),
+                           0])
+                {
+                        fingers_x(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+
+                translate([base_thick,
+                           hinge_side_length
+                           - ((counter_thick + counter_gap)
+                              * counters_per_player
+                              + counter_gap),
+                           0])
+                {
+                        fingers_x(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+
+        }
+}
+
+module base()
+{
+        difference()
+        {
+                square([point_side_length,
+                        hinge_side_length]);
+
+                translate([0,0,0])
+                {
+                        fingers_x(point_side_length, // length
+                                  base2point_mark,   // tab_sz
+                                  base2point_space,  // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                }
+
+                translate([0,
+                           hinge_side_length - frame_thick,
+                           0])
+                {
+                        fingers_x(point_side_length, // length
+                                  base2point_mark,   // tab_sz
+                                  base2point_space,  // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                }
+
+                translate([0,0,0])
+                {
+                        fingers_y(hinge_side_length, // length
+                                  base2hinge_mark,   // tab_sz
+                                  base2hinge_space,  // space
+                                  frame_thick,       // offset
+                                  base_thick,        // thick
+                                  false);            // type
+
+                }
+
+                translate([point_side_length - frame_thick,
+                           0,
+                           0])
+                {
+                        fingers_y(hinge_side_length, // length
+                                  base2hinge_mark,   // tab_sz
+                                  base2hinge_space,  // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                }
+
+                translate([quadrant_width + frame_thick,
+                           0,
+                           0])
+                {
+                        fingers_y(hinge_side_length, // length
+                                  base2hinge_mark,   // tab_sz
+                                  base2hinge_space,  // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+
+                translate([frame_thick + quadrant_width,
+                           ((counter_thick + counter_gap)
+                            * counters_per_player
+                            + counter_gap),
+                           0])
+                {
+                        fingers_x(point_side_length
+                                  - quadrant_width
+                                  - frame_thick,     // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+
+                translate([frame_thick + quadrant_width,
+                           hinge_side_length
+                           - ((counter_thick + counter_gap)
+                              * counters_per_player
+                              + counter_gap),
+                           0])
+                {
+                        fingers_x(point_side_length
+                                  - quadrant_width
+                                  - frame_thick,     // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  true);             // type
+
+                }
+
+        }
+}
+
+module point_a()
+{
+        polygon(points=[[0,0],
+                        [point_width,0],
+                        [point_width / 2, point_height]
+                       ], paths=[[0,1,2]]);
+}
+
+module point_b()
+{
+        translate([point_width,
+                   point_height,
+                   0])
+        {
+                rotate([0,0,180])
+                {
+                        point_a();
+                }
+        }
+}
+
+module pointset(type)
+{
+        // assumes points_per_quadrant is even.
+        // not sure how gameplay would work with odd points per quadrant.
+
+        translate([(eff_point_width - point_width)
+                   + frame_thick + counter_gap,
+                   counter_gap,0]) // compensate for initial point offset
+
+        for (point_lp = [0 : (points_per_quadrant - 1)])
+        {
+                translate([(point_lp * (eff_point_width)),
+                           frame_thick,0])
+                {
+                        if (is_even(point_lp) == type)
+                        {
+                                translate([0,
+                                           hinge_side_length
+                                           - point_height
+                                           - (frame_thick * 2)
+                                           - (counter_gap * 2),
+                                           0])
+                                {
+                                        point_b();
+                                }
+                        }
+                        else
+                        {
+                                point_a();
+                        }
+                }
+        }
+}
+
+module base_with_points()
+{
+        difference()
+        {
+                base();
+        
+                color("red")
+                pointset(true);
+
+                color("green")
+                pointset(false);
+        }
+}
+
+module counter_stop_a()
+{
+        difference()
+        {
+                square([point_side_length
+                        - quadrant_width
+                        - frame_thick,
+                        side_height
+                        - base_gap]);
+
+                translate([0,
+                           0,
+                           0])
+                {
+                        fingers_y(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+                }
+
+                translate([point_side_length
+                           - quadrant_width
+                           - frame_thick
+                           - frame_thick,
+                           0,
+                           0])
+                {
+                        fingers_y(side_height
+                                  - base_gap
+                                  - base_thick,      // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  0,                 // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+                }
+
+                translate([0,
+                           side_height - base_gap - base_thick,
+                           0])
+                {
+                        fingers_x(point_side_length
+                                  - quadrant_width
+                                  - frame_thick,     // length
+                                  hinge2point_mark,  // tab_sz
+                                  hinge2point_space, // space
+                                  frame_thick,       // offset
+                                  frame_thick,       // thick
+                                  false);            // type
+
+                }
+
+                translate([((point_side_length
+                             - quadrant_width
+                             - frame_thick) /2),
+                           -((point_side_length
+                                     - quadrant_width
+                                     - frame_thick
+                                     - (frame_thick *2)) /4),
+                           0])
+                {
+
+                        circle(r = ((point_side_length
+                                     - quadrant_width
+                                     - frame_thick
+                                     - (frame_thick *2)) /2),
+                               $fn=50);
+                }
+
+                
+        }
+}
+
+module counter_stop_b()
+{
+        translate([point_side_length
+                   - quadrant_width
+                   - frame_thick,
+                   side_height
+                   - base_gap,
+                   0])
+        rotate([0,0,180])
+        {
+                counter_stop_a();
+        }
+
+}
+
+module halfbox()
+{
+
+        translate([side_height + part_space,
+                   hinge_side_length + part_space + side_height + part_space,
+                   0])
+        {
+                point_side_a();
+        }
+
+        translate([side_height + part_space,
+                   0,
+                   0])
+        {
+                point_side_b();
+        }
+
+        translate([0,
+                   side_height + part_space,
+                   0])
+        {
+                hinge_side_a();
+        }
+
+        translate([side_height + part_space + point_side_length + part_space,
+                   side_height + part_space,
+                   0])
+        {
+                hinge_side_b();
+        }
+
+        translate([side_height + part_space,
+                   side_height + part_space,
+                   0])
+        {
+                base_with_points();
+        }
+
+        translate([(side_height + part_space) * 2
+                   + point_side_length + part_space,
+                   side_height + part_space,
+                   0])
+        {
+                counter_divider();
+        }
+
+        translate([side_height + part_space + point_side_length + part_space,
+                   0,
+                   0])
+        {
+                counter_stop_a();
+        }
+
+        translate([side_height + part_space + point_side_length + part_space,
+                   side_height + part_space + hinge_side_length + part_space,
+                   0])
+        {
+                counter_stop_b();
+        }
+
 
 };
+
 
 /*
   bg_2d()
@@ -431,10 +623,13 @@ module hinge_side()
 */
 module bg_2d()
 {
-        // just do a single hinge_side while I get it right.
-        hinge_side();
-};
 
+        halfbox();
+/*
+
+        counter_stop_b();
+*/
+}
 
 // do it!
 bg_2d();
